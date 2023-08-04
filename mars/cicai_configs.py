@@ -26,7 +26,7 @@ STEPS_PER_SAVE = 2000
 STEPS_PER_EVAL_IMAGE = 500
 STEPS_PER_EVAL_ALL_IMAGES = 5000
 
-VKITTI_Recon_NSG_Car_Depth_Semantic = MethodSpecification(
+VKITTI_Recon_Mars_Car_Depth_Semantic = MethodSpecification(
     config=TrainerConfig(
         method_name="mars-vkitti-car-depth-recon-semantic",
         steps_per_eval_image=STEPS_PER_EVAL_IMAGE,
@@ -84,7 +84,7 @@ VKITTI_Recon_NSG_Car_Depth_Semantic = MethodSpecification(
     description="Neural Scene Graph with semantic learning for the backgruond model.",
 )
 
-KITTI_Recon_NSG_Car_Depth = MethodSpecification(
+KITTI_Recon_Mars_Car_Depth = MethodSpecification(
     config=TrainerConfig(
         method_name="mars-kitti-car-depth-recon",
         steps_per_eval_image=STEPS_PER_EVAL_IMAGE,
@@ -101,10 +101,14 @@ KITTI_Recon_NSG_Car_Depth = MethodSpecification(
                     use_car_latents=True,
                     use_depth=True,
                     car_object_latents_path=Path(
-                        "/data1/chenjt/datasets/ckpts/pretrain/car_nerf/latent_codes_car_van_truck.pt"
+                        # "/data1/chenjt/datasets/ckpts/pretrain/car_nerf/latent_codes_car_van_truck.pt"
+                        "/mnt/intel/jupyterhub/lilu/code/mars/checkpoints/KITTI-MOT/car-object-latents/latent_codes06.pt"
                     ),
                     split_setting="reconstruction",
-                    car_nerf_state_dict_path=Path("/data1/chenjt/datasets/ckpts/pretrain/car_nerf/epoch_670.ckpt"),
+                    car_nerf_state_dict_path=Path(
+                        # "/data1/chenjt/datasets/ckpts/pretrain/car_nerf/epoch_670.ckpt"
+                        "/mnt/intel/jupyterhub/lilu/code/mars/checkpoints/KITTI-MOT/car-nerf-state-dict/epoch_670.ckpt"
+                    ),
                 ),
                 train_num_rays_per_batch=4096,
                 eval_num_rays_per_batch=4096,
@@ -191,7 +195,7 @@ Ablation_no_depth_kitti = MethodSpecification(
 )
 
 
-KITTI_NVS_NSG_Car_Depth = MethodSpecification(
+KITTI_NVS_Mars_Car_Depth = MethodSpecification(
     config=TrainerConfig(
         method_name="mars-kitti-car-depth-nvs",
         steps_per_eval_image=STEPS_PER_EVAL_IMAGE,
@@ -242,7 +246,7 @@ KITTI_NVS_NSG_Car_Depth = MethodSpecification(
     description="Neural Scene Graph implementation with vanilla-NeRF model for backgruond and object models.",
 )
 
-VKITTI_Recon_NSG_Car_Depth = MethodSpecification(
+VKITTI_Recon_Mars_Car_Depth = MethodSpecification(
     config=TrainerConfig(
         method_name="mars-vkitti-car-depth-recon",
         steps_per_eval_image=STEPS_PER_EVAL_IMAGE,
@@ -292,7 +296,7 @@ VKITTI_Recon_NSG_Car_Depth = MethodSpecification(
     description="Neural Scene Graph implementation with vanilla-NeRF model for backgruond and object models.",
 )
 
-VKITTI_NVS_NSG_Car_Depth = MethodSpecification(
+VKITTI_NVS_Mars_Car_Depth = MethodSpecification(
     config=TrainerConfig(
         method_name="mars-vkitti-car-depth-nvs",
         steps_per_eval_image=STEPS_PER_EVAL_IMAGE,

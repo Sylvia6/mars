@@ -32,7 +32,7 @@ from nerfstudio.pipelines.base_pipeline import (
     VanillaPipelineConfig,
 )
 from nerfstudio.utils import profiler
-from mars.data.mars_datamanager import MarsDataManagerConfig
+from mars.data.mars_datamanager import MarsDataManager
 
 
 @dataclass
@@ -77,7 +77,7 @@ class MarsPipeline(Pipeline):
         super().__init__()
         self.config = config
         self.test_mode = test_mode
-        self.datamanager: NSGkittiDataManager = config.datamanager.setup(
+        self.datamanager: MarsDataManager = config.datamanager.setup(
             device=device, test_mode=test_mode, world_size=world_size, local_rank=local_rank
         )
         self.datamanager.to(device)

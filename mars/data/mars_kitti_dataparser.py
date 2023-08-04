@@ -868,7 +868,7 @@ class MarsKittiDataParserConfig(DataParserConfig):
 
     _target: Type = field(default_factory=lambda: MarsKittiParser)
     """target class to instantiate"""
-    data: Path = Path("data/kitti/training/image_02/0006")
+    data: Path = Path("/mnt/intel/jupyterhub/lilu/kitti_mot/training/image_02/0006")
     """Directory specifying location of data."""
     scale_factor: float = 1
     """How much to scale the camera origins by."""
