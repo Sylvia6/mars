@@ -1181,7 +1181,8 @@ class NSGplus(DataParser):
             mask_filenames=None,
             dataparser_scale=self.scale_factor,
             metadata={
-                # "depth_filenames": depth_filenames,
+                "depth_filenames": None, 
+                    # depth_filenames,
                 "obj_metadata": None,
                     # obj_meta_tensor if len(obj_meta_tensor) > 0 else None,
                 "obj_class": None,
