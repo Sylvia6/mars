@@ -10,6 +10,7 @@ dependencies = [
 include = ["nsg*"]
 
 [project.entry-points.'nerfstudio.method_configs']
+nsg-plus-car-depth-recon-semantic = 'nsg.cicai_configs:PLUS_Recon_NSG_Car_Depth_Semantic'
 nsg-vkitti-car-depth-recon-semantic = 'nsg.cicai_configs:VKITTI_Recon_NSG_Car_Depth_Semantic'
 nsg-kitti-car-depth-recon = 'nsg.cicai_configs:KITTI_Recon_NSG_Car_Depth'
 nsg-kitti-car-depth-nvs = 'nsg.cicai_configs:KITTI_NVS_NSG_Car_Depth'
@@ -30,5 +31,6 @@ ablation-no-depth-kitti = 'nsg.cicai_configs:Ablation_no_depth_kitti'
 
 
 [project.entry-points.'nerfstudio.dataparser_configs']
+NSGplusDataParserConfig = 'nsg.data.nsg_plus_dataparser:NSGplusDataParserConfigSpecification'
 NSGkittiDataParserConfig = 'nsg.data.nsg_dataparser:NSGkittiDataParserConfigSpecification'
 NSGvkittiDataParserConfig = 'nsg.data.nsg_vkitti_dataparser:NSGvkittiDataParserConfigSpecification'
