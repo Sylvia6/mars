@@ -37,7 +37,6 @@ class NSGkittiDataManager(VanillaDataManager):  # pylint: disable=abstract-metho
         )
 
     def create_eval_dataset(self) -> NSGkittiDataset:
-
         return NSGkittiDataset(
             dataparser_outputs=self.dataparser.get_dataparser_outputs(split=self.test_split),
             scale_factor=self.config.camera_res_scale_factor,
