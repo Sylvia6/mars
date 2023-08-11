@@ -479,6 +479,7 @@ def get_obj_pose_tracking(tracklet_path, poses_imu_tracking, calibrations, selec
 
     # Extract metadata for all objects in the scene
     for tracklet in tracklets_str:
+        # frame
         tracklet = tracklet.split()
         if float(tracklet[1]) < 0:
             continue

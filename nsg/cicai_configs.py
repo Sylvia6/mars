@@ -117,14 +117,12 @@ PLUS_Recon_NSG_Car_Depth_Semantic = MethodSpecification(
             ),
             model=SceneGraphModelConfig(
                 background_model=SemanticNerfWModelConfig(
-                    num_proposal_iterations=1,
                     num_proposal_samples_per_ray=[48],
-                    num_nerf_samples_per_ray=97,
                     use_single_jitter=False,
                     semantic_loss_weight=0.1
                 ),
                 object_model_template=CarNeRFModelConfig(_target=CarNeRF),
-                object_representation="class-wise",
+                object_representation="object-wise",
                 object_ray_sample_strategy="remove-bg",
             ),
         ),
@@ -159,13 +157,13 @@ KITTI_Recon_NSG_Car_Depth = MethodSpecification(
         pipeline=NSGPipelineConfig(
             datamanager=NSGkittiDataManagerConfig(
                 dataparser=NSGkittiDataParserConfig(
-                    use_car_latents=True,
+                    use_car_latents=False,
                     use_depth=True,
-                    car_object_latents_path=Path(
-                        "/data1/chenjt/datasets/ckpts/pretrain/car_nerf/latent_codes_car_van_truck.pt"
-                    ),
+                    # car_object_latents_path=Path(
+                    #     "/data1/chenjt/datasets/ckpts/pretrain/car_nerf/latent_codes_car_van_truck.pt"
+                    # ),
                     split_setting="reconstruction",
-                    car_nerf_state_dict_path=Path("/data1/chenjt/datasets/ckpts/pretrain/car_nerf/epoch_670.ckpt"),
+                    # car_nerf_state_dict_path=Path("/data1/chenjt/datasets/ckpts/pretrain/car_nerf/epoch_670.ckpt"),
                 ),
                 train_num_rays_per_batch=4096,
                 eval_num_rays_per_batch=4096,
@@ -174,7 +172,8 @@ KITTI_Recon_NSG_Car_Depth = MethodSpecification(
             model=SceneGraphModelConfig(
                 background_model=NerfactoModelConfig(),
                 object_model_template=CarNeRFModelConfig(_target=CarNeRF),
-                object_representation="class-wise",
+                object_representation="obj-wise",
+                # "class-wise",
                 object_ray_sample_strategy="remove-bg",
             ),
         ),
@@ -267,7 +266,7 @@ KITTI_NVS_NSG_Car_Depth = MethodSpecification(
             datamanager=NSGkittiDataManagerConfig(
                 dataparser=NSGkittiDataParserConfig(
                     use_car_latents=True,
-                    use_depth=False,
+                    use_depth=True,
                     car_object_latents_path=Path(
                         "/data41/luoly/kitti_mot/latents/latent_codes06.pt"
                     ),

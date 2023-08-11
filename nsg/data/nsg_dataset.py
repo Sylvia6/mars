@@ -99,19 +99,20 @@ class NSGkittiDataset(InputDataset):
         metadata = {}
 
         if self.use_depth:
-            filepath = self.depth_filenames[data["image_idx"]]
-            height = int(self._dataparser_outputs.cameras.height[data["image_idx"]])
-            width = int(self._dataparser_outputs.cameras.width[data["image_idx"]])
+            if data["image_idx"] < len(self.depth_filenames):
+                filepath = self.depth_filenames[data["image_idx"]]
+                height = int(self._dataparser_outputs.cameras.height[data["image_idx"]])
+                width = int(self._dataparser_outputs.cameras.width[data["image_idx"]])
 
-            # Scale depth images to meter units and also by scaling applied to cameras
-            scale_factor = self.depth_unit_scale_factor * self._dataparser_outputs.dataparser_scale
-            depth_image = get_depth_image_from_path(
-                filepath=filepath, height=height, width=width, scale_factor=scale_factor
-            )  # default interpolation cv2.INTER_NEAREST
-            depth_mask = torch.abs(depth_image / scale_factor - 65535) > 1e-6  # maskout no-depth input
+                # Scale depth images to meter units and also by scaling applied to cameras
+                scale_factor = self.depth_unit_scale_factor * self._dataparser_outputs.dataparser_scale
+                depth_image = get_depth_image_from_path(
+                    filepath=filepath, height=height, width=width, scale_factor=scale_factor
+                )  # default interpolation cv2.INTER_NEAREST
+                depth_mask = torch.abs(depth_image / scale_factor - 65535) > 1e-6  # maskout no-depth input
 
-            metadata["depth_image"] = depth_image
-            metadata["depth_mask"] = depth_mask
+                metadata["depth_image"] = depth_image
+                metadata["depth_mask"] = depth_mask
 
         # semantic metadata
         if self.use_semantic:
