@@ -233,7 +233,7 @@ class SceneGraphModel(Model):
         self.depth_loss = general_depth_loss
         self.monosdf_depth_loss = monosdf_depth_loss
         if self.use_semantic:
-            self.cross_entropy_loss = torch.nn.CrossEntropyLoss(reduction="mean", ignore_index=self.semantic_num)
+            self.cross_entropy_loss = torch.nn.CrossEntropyLoss(reduction="mean", ignore_index=self.background_model.semantic_num)
 
         # metrics
         self.psnr = PeakSignalNoiseRatio(data_range=1.0)
@@ -514,7 +514,7 @@ class SceneGraphModel(Model):
             ]
             rgbs[index[..., 0], index[..., 1], :] = output_obj[class_id]["field_outputs"][FieldHeadNames.RGB][..., :]
             if self.use_semantic:
-                semantics[index[..., 0], index[..., 1], self.background_model.str2semantic[_type2str[type_id]]] = 1.0
+                semantics[index[..., 0], index[..., 1], self.background_model.str2semantic[(_type2str[type_id]).lower()]] = 1.0
 
             if not self.training and self.config.debug_object_pose:
                 debug_density[index[..., 0], index[..., 1], 0] = 1
@@ -688,39 +688,40 @@ class SceneGraphModel(Model):
                 loss_dict["sky_color_loss"] = self.rgb_loss(outputs["sky_rgb"][sky_mask], image[sky_mask])
 
         if self.training and self.use_depth_loss:
-            assert "depth_image" in batch
-            assert "depth_mask" in batch
-            depth_gt = batch["depth_image"].to(self.device).float()
-            depth_mask = batch["depth_mask"].to(self.device)
-            if not self.config.is_euclidean_depth:
-                depth_gt = depth_gt * outputs["directions_norm"]
-            depth_gt[~depth_mask] = 0.0  # to make it compatible with the automask of the depth loss
-            predicted_depth = outputs["depth"].float()
-            depth_loss = 0
-            sigma = self._get_sigma().to(self.device)
+            # assert "depth_image" in batch
+            # assert "depth_mask" in batch
+            if "depth_image" in batch and "depth_mask" in batch:
+                depth_gt = batch["depth_image"].to(self.device).float()
+                depth_mask = batch["depth_mask"].to(self.device)
+                if not self.config.is_euclidean_depth:
+                    depth_gt = depth_gt * outputs["directions_norm"]
+                depth_gt[~depth_mask] = 0.0  # to make it compatible with the automask of the depth loss
+                predicted_depth = outputs["depth"].float()
+                depth_loss = 0
+                sigma = self._get_sigma().to(self.device)
 
-            if self.config.depth_loss_mult > 1e-8:
-                for i in range(len(outputs["weights_list"])):
-                    depth_loss += self.depth_loss(
-                        weights=outputs["weights_list"][i],
-                        ray_samples=outputs["ray_samples_list"][i],
-                        termination_depth=depth_gt,
-                        predicted_depth=predicted_depth,
-                        sigma=sigma,
-                        directions_norm=outputs["directions_norm"],
-                        is_euclidean=self.config.is_euclidean_depth,
-                        depth_loss_type=self.config.depth_loss_type,
-                    ) / len(outputs["weights_list"])
-                    
-            mono_depth_loss = monosdf_depth_loss(
-                termination_depth=depth_gt,
-                predicted_depth=predicted_depth,
-                is_euclidean=self.config.is_euclidean_depth,
-                directions_norm=outputs["directions_norm"],
-            )
-            loss_dict["depth_loss"] = (
-                self.config.depth_loss_mult * depth_loss + self.config.mono_depth_loss_mult * mono_depth_loss
-            )
+                if self.config.depth_loss_mult > 1e-8:
+                    for i in range(len(outputs["weights_list"])):
+                        depth_loss += self.depth_loss(
+                            weights=outputs["weights_list"][i],
+                            ray_samples=outputs["ray_samples_list"][i],
+                            termination_depth=depth_gt,
+                            predicted_depth=predicted_depth,
+                            sigma=sigma,
+                            directions_norm=outputs["directions_norm"],
+                            is_euclidean=self.config.is_euclidean_depth,
+                            depth_loss_type=self.config.depth_loss_type,
+                        ) / len(outputs["weights_list"])
+                        
+                mono_depth_loss = monosdf_depth_loss(
+                    termination_depth=depth_gt,
+                    predicted_depth=predicted_depth,
+                    is_euclidean=self.config.is_euclidean_depth,
+                    directions_norm=outputs["directions_norm"],
+                )
+                loss_dict["depth_loss"] = (
+                    self.config.depth_loss_mult * depth_loss + self.config.mono_depth_loss_mult * mono_depth_loss
+                )
 
         if self.training:
             if self.config.predict_normals:
@@ -759,8 +760,12 @@ class SceneGraphModel(Model):
         if self.use_depth_loss:
             # align to predicted depth and normalize
             background_depth = outputs["background_depth"]
-            depth_gt = batch["depth_image"].to(depth)
-            depth_mask = batch["depth_mask"].to(self.device)
+            if "depth_image" in batch and "depth_mask" in batch:
+                depth_gt = batch["depth_image"].to(depth)
+                depth_mask = batch["depth_mask"].to(self.device)
+            else:
+                depth_gt = torch.zeros_like(depth)
+                depth_mask = torch.zeros_like(depth, dtype=torch.bool)
             if not self.config.is_euclidean_depth:
                 depth_gt = depth_gt * outputs["directions_norm"]
             depth_gt[~depth_mask] = 0.0  # to make it compatible with the automask of the depth loss

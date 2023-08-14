@@ -294,7 +294,7 @@ class NSGplus(DataParser):
         cam_poses_tracking = []
         for cam_i in self.cameras:
             cam_i_imu = calib[f"Tr_cam_to_imu_{cam_i}"]
-            cam_i_w = poses_imu_w_tracking @ cam_i_imu @ opengl2kitti
+            cam_i_w =  opengl2kitti @ poses_imu_w_tracking @ cam_i_imu
             cam_poses_tracking.append(cam_i_w)
         camera_poses = np.concatenate(cam_poses_tracking)     
 
@@ -608,9 +608,10 @@ class NSGplus(DataParser):
     def load_ego_pos(self):
         poses_path = os.path.join(self.data, 'ego_pos_with_vel')
         poses = []
+        first_pos = load_pickle(os.path.join(poses_path, ("%06d"%0)+".pkl"))['ego_pose']
         for frame in range(self.selected_frames[0], self.selected_frames[1]+1):
             info = load_pickle(os.path.join(poses_path, ("%06d"%frame)+".pkl"))
-            poses.append(info['ego_pose'])
+            poses.append(np.linalg.inv(first_pos) @ info['ego_pose'])
         return np.array(poses).astype(np.float64)
     
     def load_label(self, poses_imu_w, transform_matrix, moving_threshold=1.0):

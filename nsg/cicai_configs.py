@@ -100,16 +100,10 @@ PLUS_Recon_NSG_Car_Depth_Semantic = MethodSpecification(
         pipeline=NSGPipelineConfig(
             datamanager=NSGkittiDataManagerConfig(
                 dataparser=NSGplusDataParserConfig(
-                    use_car_latents=False,
                     use_depth=True,
                     use_semantic=True,
                     semantic_mask_classes=['Undefined'],
-                    # car_object_latents_path=Path(
-                    #     "/DATA_EDS/liuty/ckpts/pretrain/car_nerf/vkitti/latents/latent_codes02.pt"
-                    # ),
                     split_setting="reconstruction",
-                    # car_nerf_state_dict_path=Path("/DATA_EDS/liuty/ckpts/pretrain/car_nerf/vkitti/epoch_805.ckpt"),
-                    # semantic_path=Path("/data22/DISCOVER_summer2023/xiaohm2306/Scene02/clone/frames/classSegmentation")
                 ),
                 train_num_rays_per_batch=4096,
                 eval_num_rays_per_batch=4096,
@@ -117,7 +111,6 @@ PLUS_Recon_NSG_Car_Depth_Semantic = MethodSpecification(
             ),
             model=SceneGraphModelConfig(
                 background_model=SemanticNerfWModelConfig(
-                    num_proposal_samples_per_ray=[48],
                     use_single_jitter=False,
                     semantic_loss_weight=0.1
                 ),
@@ -128,6 +121,10 @@ PLUS_Recon_NSG_Car_Depth_Semantic = MethodSpecification(
         ),
         optimizers={
             "background_model": {
+                "optimizer": RAdamOptimizerConfig(lr=1e-3, eps=1e-15),
+                "scheduler": ExponentialDecaySchedulerConfig(lr_final=1e-5, max_steps=200000),
+            },
+            "learnable_global": {
                 "optimizer": RAdamOptimizerConfig(lr=1e-3, eps=1e-15),
                 "scheduler": ExponentialDecaySchedulerConfig(lr_final=1e-5, max_steps=200000),
             },
