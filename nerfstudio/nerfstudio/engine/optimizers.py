@@ -127,7 +127,10 @@ class Optimizers:
             if max_norm is not None:
                 grad_scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(self.parameters[param_group], max_norm)
-            grad_scaler.step(optimizer)
+            # grad_scaler.step(optimizer)
+            if any(any(p.grad is not None for p in g["params"]) for g in optimizer.param_groups):
+                grad_scaler.step(optimizer)
+
 
     def optimizer_step_all(self) -> None:
         """Run step for all optimizers."""
@@ -157,4 +160,4 @@ class Optimizers:
             loaded_state: the state from the previous checkpoint
         """
         for k, v in loaded_state.items():
-            self.optimizers[k].load_state_dict(v)
+                self.optimizers[k].load_state_dict(v)

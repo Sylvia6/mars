@@ -14,10 +14,10 @@ def load_pickle(path):
     
 class PlusData():
     def __init__(self, 
-                 data_dir='/mnt/intel/artifact_management/auto-labeling-multi-frame/j7_10-multi-frame_manual_all_bag', 
-                 bag_name='000210_20211111T153653_j7-00010_42_1to21.db'):
+                 data_dir='/mnt/intel/artifact_management/auto-labeling-multi-frame/j7_10-multi-frame_manual_all_bag/000210_20211111T153653_j7-00010_42_1to21.db', 
+                 bag_name=''):
         self.data_dir = data_dir
-        self.bag_name = bag_name
+        self.bag_name = os.path.split(data_dir)[-1]
         self.seg_dir = osp.join("/mnt/intel/data/mrb/dataset/nerf/l4_origin/", bag_name)
         self.bag_dir = osp.join(data_dir, bag_name)
         self.camera_names = ['front_left', 'front_right',]
@@ -38,9 +38,14 @@ class PlusData():
         pts_filename = osp.join(self.bag_dir, "pointcloud", ("%06d"%idx)+".bin")
         
         # label
-        label_path = osp.join(self.bag_dir, "auto_label", ("%06d"%idx)+".pkl")
-        label = load_pickle(label_path)
-        bboxs = np.array([l['box3d_lidar'] for l in label])
+        # auto_label_path = osp.join(self.bag_dir, "auto_label", ("%06d"%idx)+".pkl")
+        # auto_label = load_pickle(auto_label_path)       
+        # auto_bboxs = np.array([l['box3d_lidar'] for l in auto_label])
+        
+        label_path = osp.join(self.bag_dir, "label", ("%06d"%idx)+".pkl")
+        label = load_pickle(label_path)     
+        bboxs = np.array([l['box3d_lidar'] for l in label])  
+        
         # box_xyz = np.array([l['box3d_lidar'][:3] for l in label])
         # box_lwh = np.array([l['box3d_lidar'][3:6] for l in label])
         # box_yaw = np.array([l['box3d_lidar'][6] for l in label])
@@ -55,8 +60,8 @@ class PlusData():
         calib = load_pickle(calib_file)
         
         img_filenames_list = []
-        lidar2img_list = []
-        lidar2camera_list = []
+        imu2img_list = []
+        imu2cam_list = []
         camera_intrinsics_list = []
 
         # iter cameras
@@ -65,33 +70,59 @@ class PlusData():
             img_filename = osp.join(self.bag_dir, camera_name, ("%06d"%idx)+".png")
             img_filenames_list.append(img_filename)
 
-            rect = np.linalg.inv(
+            imu2cam = np.linalg.inv(
                 calib[f'Tr_cam_to_imu_{camera_name}']).astype(np.float64)
-            P2 = np.concatenate([calib[f'P_{camera_name}'], last_line], axis=0).astype(np.float64)  # 内参
-            lidar2img = np.dot(P2, rect)  
+            K = np.concatenate([calib[f'P{i+1}'], last_line], axis=0).astype(np.float64)  # 内参
+            imu2img = np.dot(K, imu2cam)  
             
             # camera2world = imu2world @ camera2imu
             
-            lidar2img_list.append(lidar2img)
-            lidar2camera_list.append(rect)
-            camera_intrinsics_list.append(P2)
+            imu2img_list.append(imu2img)
+            imu2cam_list.append(imu2cam)
+            camera_intrinsics_list.append(K)
             
-        lidar2img_list = np.stack(lidar2img_list, axis=0)
-        lidar2camera_list = np.stack(lidar2camera_list, axis=0)
+        imu2img_list = np.stack(imu2img_list, axis=0)
+        imu2cam_list = np.stack(imu2cam_list, axis=0)
         camera_intrinsics_list = np.stack(camera_intrinsics_list, axis=0)
 
-
+        fine_boxs = {'Car':[], 'Truck':[]}
+        for l in label:
+            fine_boxs[l['name']].append(l['box3d_lidar'])
+        # for l in auto_label: 
+        #     name, box = l['name'], l['box3d_lidar']
+        #     dis, same_idx = 2.0, -1
+        #     for i, gt_box in enumerate(fine_boxs[name]):
+        #         dis_tmp = np.linalg.norm(gt_box[:2] - box[:2])
+        #         if dis_tmp <= dis:
+        #             dis = dis_tmp
+        #             same_idx = i
+        #     if same_idx >= 0:
+        #         fine_boxs[name][i][:6] += box[:6]
+        #         fine_boxs[name][i][:6] /= 2.0
+        #     # else:
+        #     #     fine_boxs["Car"].append(box)
+                    
         info = dict(
             ego_pos=ego_pos,
             timestamp=timestamp,
             pts_filename=pts_filename,
             img_info=img_filenames_list,
-            lidar2img=lidar2img_list,
-            lidar2camera=lidar2camera_list,
+            imu2img=imu2img_list,
+            imu2cam=imu2cam_list,
             camera_intrinsics=camera_intrinsics_list,
             camera_names=self.camera_names,
+            # auto_bboxs=auto_bboxs,
             bboxs=bboxs,
         )
+        fine_boxs = [*fine_boxs['Car'], *fine_boxs['Truck']]
+        img = cv2.imread(info['img_info'][0])
+        
+        # img = plot_rect3d_on_img(img, get_bboxs(fine_boxs), imu2cam_list[0], camera_intrinsics_list[0])
+        # img = plot_rect3d_on_img(img, get_bboxs(auto_bboxs), imu2cam_list[0], camera_intrinsics_list[0])
+        img = plot_rect3d_on_img(img, get_bboxs(bboxs), imu2cam_list[0], camera_intrinsics_list[0], (255,0,0))
+        cv2.imwrite(f'tmp/{idx}.png', img)
+        print(f'frame {idx}')
+        # print([l['track_id'] for l in auto_label])
         return info
         
     
@@ -149,12 +180,31 @@ def plot_points(points, bboxs=None, file_name=None, bev_range=[-100, -50, 150, 5
                 cv2.polylines(canvas, [loc_corners.T.reshape(4,2)[:,::-1]], isClosed=True, color=[0,0,255], thickness=1)
     if file_name is not None:
         cv2.imwrite("%s.png" % file_name, canvas)
-        import pdb;pdb.set_trace()
     else:
         return canvas
-    
+
+def plot_rect3d_on_img(img,
+                       bboxs_imu, imu2cam, K,
+                       color=(0, 255, 0),
+                       thickness=1):
+    line_indices = ((0, 1), (0, 3), (0, 4), (1, 2), (1, 5), (3, 2), (3, 7),
+                    (4, 5), (4, 7), (2, 6), (5, 6), (6, 7))
+    for bbox_imu in bboxs_imu:
+        bbox_cam = bbox_imu @ imu2cam.T
+        if (bbox_cam[:, 2] <= 0.0).any():
+            continue
+        bbox_img = bbox_cam @ K.T
+        bbox_img = (bbox_img[:, :2] / bbox_img[:, 2][:,None]).astype(int)
+        for start, end in line_indices:
+            cv2.line(img, bbox_img[start], bbox_img[end],
+                        color, thickness,
+                        cv2.LINE_AA)
+
+    return img.astype(np.uint8)
+
 def get_bboxs(bboxs):
     res = []
+    obj_imu = []
     for bbox in bboxs:
         # Extract bbox parameters
         x, y, z, l, w, h, yaw = bbox
@@ -162,78 +212,75 @@ def get_bboxs(bboxs):
         corners = np.array([
             [l/2, w/2, h/2],
             [l/2, w/2, -h/2],
-            [l/2, -w/2, h/2],
             [l/2, -w/2, -h/2],
+            [l/2, -w/2, h/2],
             [-l/2, w/2, h/2],
             [-l/2, w/2, -h/2],
+            [-l/2, -w/2, -h/2],
             [-l/2, -w/2, h/2],
-            [-l/2, -w/2, -h/2]
         ])
+        corners = np.insert(corners, 3, 1, -1 )
+        
         rotation_matrix = np.array([
             [np.cos(yaw), -np.sin(yaw), 0],
             [np.sin(yaw), np.cos(yaw), 0],
             [0, 0, 1]
         ])
-        rotated_corners = corners @ rotation_matrix.T
-        translated_corners = rotated_corners + np.array([x, y, z])
-        res.append(np.insert(translated_corners, 3, 1,-1))
+        obj_pose_imu = np.eye(4)
+        obj_pose_imu[:3, 3] = np.array([x,y,z])
+        obj_pose_imu[:3, :3] = rotation_matrix
+    
+        corners_imu = corners @ obj_pose_imu.T
+    
+        res.append(corners_imu)
     return res
 
 
 if __name__ == '__main__':
-    data = PlusData()
+    data = PlusData(data_dir = '/mnt/intel/data/mrb/dataset/nerf/pdb_b2_benchmark/20221228T111336_pdb-l4e-b0002_20_1to21.db')
     pcd = []
-    first_pos = data.get_item(80)['ego_pos']
-    img = cv2.imread(data.get_item(80)['img_info'][0])[...,::-1]
-    H, W, _ = img.shape
+    
+    # img = cv2.imread(data.get_item(80)['img_info'][0])[...,::-1]
+    # H, W, _ = img.shape
 
-    for i in range(100, data.len(), 20):
-        info = data.get_item(i)    
-        K = info['camera_intrinsics'][0] 
-        
-        
-        bboxs = get_bboxs(info['bboxs'])
-        for bboxs_imu in bboxs:
-            bboxs_cam = bboxs_imu @ info['ego_pos'].T @ np.linalg.inv(first_pos).T
-            # pts3d = pts3d[pts3d[:, 2] > 0.0]
-            bboxs_img = bboxs_cam @ K.T
-            bboxs_img = (bboxs_img[:, :2] / bboxs_img[:, 2][:,None]).astype(int)
-            import pdb;pdb.set_trace()
-            for i in range(4):
-                cv2.line(img, tuple(bboxs_img[i]), tuple(bboxs_img[(i+1) % 4]), (0, 255, 0), 2)
-                cv2.line(img, tuple(bboxs_img[i+4]), tuple(bboxs_img[(i+1) % 4 + 4]), (0, 255, 0), 2)
-                cv2.line(img, tuple(bboxs_img[i]), tuple(bboxs_img[i+4]), (0, 255, 0), 2)
-        cv2.imwrite('tmp.png', img)
-        import pdb;pdb.set_trace
-        # bboxs_2d = bboxs_cam@
-        
-        # pose = info['lidar2camera'][0]
-        # img = cv2.imread(info['img_info'][0])[...,::-1]
+
+    # for frame in range(100, data.len(), 20):
+    os.makedirs('tmp', exist_ok=True)
+    for frame in range(0,data.len()):
+        info = data.get_item(frame)    
+        # img = cv2.imread(info['img_info'][0])
         # H, W, _ = img.shape
+        # K = info['camera_intrinsics'][0] 
+        # imu2world_pose = (np.linalg.inv(mid_pos) @ info['ego_pos'])
+        
+            
+        """
+            lidar map verify
+        """
+        # pose = info['imu2cam'][0]
         # points = np.fromfile(info['pts_filename']).reshape(-1, 4)
         # points[:, -1] = 1
-        # imu2world_pose = (np.linalg.inv(first_pos) @ info['ego_pos'])
-        # points = points @ info['ego_pos'].T @ np.linalg.inv(first_pos).T
+        # points = points @ imu2world_pose.T
+        # # @ info['ego_pos'].T @ np.linalg.inv(first_pos).T
         # # print(info['ego_pos'])
         # pcd.append(points)
         
-    # # lidar map
+    
     # pcd = np.concatenate(pcd, 0)
+    # plot_points(pcd, None, 'tmp_bev')
     
-    # plot_points(pcd, 'tmp_bev')
-    
-    # # camera
+    """
+        camera verify 
+    """
     
     # info = data.get_item(100)        
     # K = info['camera_intrinsics'][0] 
-    # pose = info['lidar2camera'][0]
+    # pose = info['imu2camera'][0] @ info['ego_pos'] # w2imu , imu2cam0
     # img = cv2.imread(info['img_info'][0])[...,::-1]
     
-    # pts3d = points @ pose.T    # n*3
+    # pts3d = pcd @ pose.T    # n*3
     # pts3d = pts3d[pts3d[:, 2] > 0.0]
     # pts2d = pts3d @ K.T
-    
-    # # pts2d = points @ info['lidar2img'][0].T
 
     # pts2d = pts2d[:, :2] / pts2d[:, 2][:, None]
     # condition = np.logical_and(
@@ -247,8 +294,10 @@ if __name__ == '__main__':
     # from matplotlib import pyplot as plt
     # import matplotlib.cm as cm
     # dis = np.sqrt(np.sum(np.square(pts3d), axis=-1))
+    # import pdb;pdb.set_trace()
     # colors = cm.jet(dis / np.max(dis))[:,:3]
     # plt.imshow(img)
     # plt.gca().scatter(pts2d[:, 0], [pts2d[:, 1]], color=colors, s=1, alpha=0.3)
     # plt.savefig('tmp.png')
+    # import pdb;pdb.set_trace()
     

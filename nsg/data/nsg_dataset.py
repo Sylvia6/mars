@@ -73,7 +73,8 @@ class NSGkittiDataset(InputDataset):
         self.use_depth = use_depth
         if use_depth:
             self.depth_filenames = self.metadata["depth_filenames"]
-            self.depth_unit_scale_factor = 0.01  # VKITTI provide depth maps in centimeters
+            # self.depth_unit_scale_factor = 0.01  # VKITTI provide depth maps in centimeters
+            self.depth_unit_scale_factor = 1.0
 
     def get_scene_images_tracking(self, l_image_filename):
         imgs = imageio.imread(l_image_filename)

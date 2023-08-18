@@ -869,7 +869,7 @@ class NSGkittiDataParserConfig(DataParserConfig):
 
     _target: Type = field(default_factory=lambda: NSGkitti)
     """target class to instantiate"""
-    data: Path = Path("data/kitti/training/image_02/0006")
+    data: Path = Path("/mnt/intel/jupyterhub/lilu/kitti_mot/training/image_02/0006")
     """Directory specifying location of data."""
     scale_factor: float = 1
     """How much to scale the camera origins by."""
@@ -918,7 +918,7 @@ class NSGkittiDataParserConfig(DataParserConfig):
     split_setting: str = "reconstruction"
     use_semantic: bool = False
     """whether to use semantic information"""
-    semantic_path: Optional[Path] = Path("")
+    semantic_path: Optional[Path] = Path("/mnt/intel/jupyterhub/lilu/kitti_mot/panoptic_maps")
     """path of semantic inputs"""
     semantic_mask_classes: List[str] = field(default_factory=lambda: [])
     """semantic classes that do not generate gradient to the background model"""
@@ -985,12 +985,6 @@ class NSGkitti(DataParser):
         tr_imu2velo = tracking_calibration["Tr_imu2velo"]
         tr_velo2imu = invert_transformation(tr_imu2velo[:3, :3], tr_imu2velo[:3, 3])
         poses_velo_w_tracking = np.matmul(poses_imu_w_tracking, tr_velo2imu)  # (n_frames, 4, 4) velodyne pose
-        if self.use_semantic:
-            semantics = pd.read_csv(
-                "/data22/DISCOVER_summer2023/chenjt2305/datasets/kitti-step/panoptic_maps/mapping/colors/0006.txt",
-                sep=" ",
-                index_col=False,
-            )
 
         if self.use_semantic:
             semantics = pd.read_csv(

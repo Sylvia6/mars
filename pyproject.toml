@@ -12,6 +12,7 @@ include = ["nsg*"]
 [project.entry-points.'nerfstudio.method_configs']
 nsg-plus-car-depth-recon-semantic = 'nsg.cicai_configs:PLUS_Recon_NSG_Car_Depth_Semantic'
 nsg-vkitti-car-depth-recon-semantic = 'nsg.cicai_configs:VKITTI_Recon_NSG_Car_Depth_Semantic'
+nsg-kitti-car-depth-recon-semantic = 'nsg.cicai_configs:KITTI_Recon_NSG_Car_Depth_Semantic'
 nsg-kitti-car-depth-recon = 'nsg.cicai_configs:KITTI_Recon_NSG_Car_Depth'
 nsg-kitti-car-depth-nvs = 'nsg.cicai_configs:KITTI_NVS_NSG_Car_Depth'
 nsg-vkitti-car-depth-recon = 'nsg.cicai_configs:VKITTI_Recon_NSG_Car_Depth'

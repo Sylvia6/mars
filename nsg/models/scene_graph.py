@@ -351,7 +351,7 @@ class SceneGraphModel(Model):
             dim=obj_pose[..., 5:8],
             one_intersec_per_ray=False,
         )
-
+        
         # No intersection with object bounding boxes, use only the background node
         if intersection_map is None:
             return self.get_background_outputs(ray_bundle)
@@ -514,8 +514,8 @@ class SceneGraphModel(Model):
             ]
             rgbs[index[..., 0], index[..., 1], :] = output_obj[class_id]["field_outputs"][FieldHeadNames.RGB][..., :]
             if self.use_semantic:
-                semantics[index[..., 0], index[..., 1], self.background_model.str2semantic[(_type2str[type_id]).lower()]] = 1.0
-
+                semantics[index[..., 0], index[..., 1], self.background_model.str2semantic[(_type2str[type_id])]] = 1.0
+                
             if not self.training and self.config.debug_object_pose:
                 debug_density[index[..., 0], index[..., 1], 0] = 1
                 debug_rgb[index[..., 0], index[..., 1], 0] = 25 * (class_id + 1) / 255.0
