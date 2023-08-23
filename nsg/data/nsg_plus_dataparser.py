@@ -49,7 +49,10 @@ camera_ls = [2, 3]
 opencv2opengl = np.array(
     [[1.0, 0.0, 0.0, 0.0], [0.0, -1.0, 0.0, 0.0], [0.0, 0.0, -1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
 )
-       
+
+kitti2vkitti = np.array(
+    [[1.0, 0.0, 0.0, 0.0], [0.0, 0.0, -1.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+)
 
 def load_pickle(path):
     with open(path, 'rb') as f:
@@ -153,10 +156,10 @@ def extract_object_information(args, visible_objects, objects_meta):
     obj_meta_ls = [
         (obj * np.array([1.0, args.box_scale, 1.0, args.box_scale, 1.0])).astype(np.float32)
         if obj[4] != 4
-        else obj 
-        # * np.array([1.0, 1.2, 1.0, 1.2, 1.0])
+        else obj * np.array([1.0, 1.2, 1.0, 1.2, 1.0])
         for obj in obj_meta_ls
-    ]  # [n_obj, [track_id, length * box_scale/1.2, height, width * box_scale/1.2, class_id]] 1.2 for humans, box_scale for other objects
+    ]  
+    # [n_obj, [track_id, length * scale, height, width * scale, class_id]]   scale: 1.2 for humans, box_scale for other objects
 
     return obj_properties, add_input_rows, obj_meta_ls, scene_objects, scene_classes
 
@@ -165,7 +168,7 @@ class NSGplusDataParserConfig(DataParserConfig):
     """nerual scene graph dataset parser config"""
     _target: Type = field(default_factory=lambda: NSGplus)
     """target class to instantiate"""
-    data: Path = Path("/mnt/intel/artifact_management/auto-labeling-multi-frame/j7_10-multi-frame_manual_all_bag/000210_20211111T153653_j7-00010_42_1to21.db") 
+    data: Path = Path("/mnt/intel/data/mrb/dataset/nerf/pdb_b2_benchmark/20221228T111336_pdb-l4e-b0002_20_1to21.db") 
     """Directory specifying location of data."""
     scale_factor: float = 1
     """How much to scale the camera origins by."""
@@ -175,7 +178,7 @@ class NSGplusDataParserConfig(DataParserConfig):
     """alpha color of background"""
     first_frame: int = 0  
     """specifies the beginning of a sequence if not the complete scene is taken as Input"""
-    last_frame: int = 198
+    last_frame: int = 199
     """specifies the end of a sequence"""
     use_object_properties: bool = True
     """ use pose and properties of visible objects as an input """
@@ -183,12 +186,13 @@ class NSGplusDataParserConfig(DataParserConfig):
     """specify wich properties are used"""
     obj_opaque: bool = True
     """Ray does stop after intersecting with the first object bbox if true"""
-    box_scale: float = 1.5
+    box_scale: float = 1 
+    # 1.5
     """Maximum scale for bboxes to include shadows"""
     novel_view: str = "left"
-    use_obj: bool = False 
+    use_obj: bool = True 
     render_only: bool = False
-    bckg_only: bool = True
+    bckg_only: bool = False
     use_object_properties: bool = True
     near_plane: float = 0.5
     """specifies the distance from the last pose to the near plane"""
@@ -213,8 +217,6 @@ class NSGplusDataParserConfig(DataParserConfig):
     """whether the training loop contains depth"""
     split_setting: str = "reconstruction"
     use_semantic: bool = False
-    """whether to use semantic information"""
-    # semantic_path: Optional[Path] = Path("/mnt/intel/data/mrb/dataset/nerf/l4_origin")
     """path of semantic inputs"""
     semantic_mask_classes: List[str] = field(default_factory=lambda: [])
     """semantic classes that do not generate gradient to the background model"""
@@ -255,7 +257,6 @@ class NSGplus(DataParser):
         self.debug_local = False
         self.use_depth = config.use_depth
         self.use_semantic = config.use_semantic
-        # self.semantic_path = os.path.join(config.semantic_path, self.bag_name)
         self.cameras = config.cameras
 
     def _generate_dataparser_outputs(self, split="train"):
@@ -269,17 +270,18 @@ class NSGplus(DataParser):
         
         # count frames
         timestamp_path = os.path.join(self.data, "timestamp")
-        timestamps = [load_pickle(os.path.join(timestamp_path, ("%06d"%frame)+".pkl")) for frame in range(self.selected_frames[0], self.selected_frames[1]+1)]
+        timestamps = [load_pickle(os.path.join(timestamp_path, name)) for name in os.listdir(timestamp_path)]
+        
+        # Total number of frames in the scene
+        self.n_scene_frames = len(timestamps)
 
         # load calib info
         calibration_file = os.path.join(self.data, "calib", ("%06d"%0)+".pkl")
         calib = load_pickle(calibration_file)
-        # P1, P2 = calib['P1'], calib['P2']
-        # focal_X, focal_Y = P1[0,0], P1[1,1] # uncertain, P1==P2 ?
         
         if self.use_semantic:
             semantic_names = []
-            semantics = load_color("/mnt/intel/data/mrb/dataset/nerf/l4_origin/000210_20211111T153653_j7-00010_42_1to21.db/color.txt")
+            semantics = load_color(f"/mnt/intel/artifact_management/auto-labeling-multi-frame/j7_10-multi-frame_manual_all_bag/000210_20211111T153653_j7-00010_42_1to21.db/color.txt")
             semantics = semantics.loc[~semantics["Category"].isin(self.config.semantic_mask_classes)]
             semantic_meta = Semantics(
                 filenames=[],
@@ -290,23 +292,27 @@ class NSGplus(DataParser):
                 
         # load imu pose        
         poses_imu_w_tracking = self.load_ego_pos() # (n_frames, 4, 4) imu2world
+        pose0 = poses_imu_w_tracking[0].copy()
+        poses_imu_w_tracking = np.linalg.inv(pose0) @ poses_imu_w_tracking
         
+        # selected frame idx
         cam_poses_tracking = []
         intrinsics = []
         for cam_i in self.cameras:
             cam_i_imu = calib[f"Tr_cam_to_imu_{cam_i}"]
             cam_i_w = poses_imu_w_tracking @ cam_i_imu @ opencv2opengl
+            cam_i_w = cam_i_w[self.selected_frames[0]: self.selected_frames[1]+1]
             cam_poses_tracking.append(cam_i_w)
             
             if cam_i == 'front_left':
                 K = calib['P1'][None,...].repeat(len(cam_i_w),axis=0)   # cam_pose_num * 3 * 4
-            elif cam_i == 'front-right':
+            elif cam_i == 'front_right':
                 K = calib['P2'][None,...].repeat(len(cam_i_w),axis=0)   # cam_pose_num * 3 * 4
             else:
                 K = calib[f'P_{cam_i}'][None,...].repeat(len(cam_i_w),axis=0)   # cam_pose_num * 3 * 4
             intrinsics.append(K)
             
-        camera_poses = np.concatenate(cam_poses_tracking)
+        poses = np.concatenate(cam_poses_tracking)
         intrinsics = torch.from_numpy(np.concatenate(intrinsics).astype(np.float32))
 
         image_names = []
@@ -318,33 +324,18 @@ class NSGplus(DataParser):
                     
         if self.use_depth:            
             depth_names = [os.path.join(self.data, 'depth_npy', ("%06d"%frame)+".npy") for frame in range(self.selected_frames[0], self.selected_frames[1]+1)] 
-                  
-        # # Orients and centers the poses
-        # oriented = torch.from_numpy(np.array(camera_poses).astype(np.float32))  # (n_frames, 3, 4)
-        # oriented, transform_matrix = camera_utils.auto_orient_and_center_poses(
-        #     oriented
-        # )  # oriented (n_frames, 3, 4), transform_matrix (3, 4)     
-        # row = torch.tensor([0, 0, 0, 1], dtype=torch.float32)
-        # zeros = torch.zeros(oriented.shape[0], 1, 4)
-        # oriented = torch.cat([oriented, zeros], dim=1)
-        # oriented[:, -1] = row  # (n_frames, 4, 4)
-        # transform_matrix = torch.cat([transform_matrix, row[None, :]], dim=0)  # (4, 4)
-        # poses = oriented.numpy()
-        # transform_matrix = transform_matrix.numpy()
-        
         
         # Calculate the world pose of the object, and center scale
-        poses = camera_poses.copy()
-         # center poses
-        poses[:, :3, 3] -= np.mean(poses[:, :3, 3], axis=0)
-        # scale poses
-        poses[:, :3, 3] /= np.abs(poses[:, :3, 3]).max()
-        transform_matrix = np.array(poses[0] @ np.linalg.inv(camera_poses[0]))
-               
-        # Align Axis with vkitti axis
-        poses_imu_2_trans = transform_matrix @ poses_imu_w_tracking
+        shift = np.mean(poses[:, :3, 3], axis=0)
+        self.scale_factor = 1 / np.abs(poses[:, :3, 3]).max()
+        
+        visible_objects_, objects_meta_ = self.load_label(poses_imu_w_tracking, shift=shift)
+        
         # Load visible_objects and objects_meta label 
-        visible_objects_, objects_meta_ = self.load_label(poses_imu_2_trans)
+        poses[:, :3, 3] -= shift
+        poses = kitti2vkitti @ poses
+        visible_objects_[:, :, [9]] *= -1
+        visible_objects_[:, :, [7, 8, 9]] = visible_objects_[:, :, [7, 9, 8]]
                 
         visible_objects_ls.append(visible_objects_)
         objects_meta_ls.append(objects_meta_)
@@ -368,7 +359,7 @@ class NSGplus(DataParser):
             self.config.max_input_objects = 0
             
 
-        counts = np.arange(len(visible_objects)).reshape(2, -1)
+        counts = np.arange(len(visible_objects)).reshape(len(self.cameras), -1)
         i_test = np.array([(idx + 1) % 4 == 0 for idx in counts[0]])    # 1/4 test radio
         i_test = np.tile(i_test, len(self.cameras))
         if self.config.split_setting == "reconstruction":
@@ -395,41 +386,41 @@ class NSGplus(DataParser):
         i_test = counts[i_test]
         
         
-        novel_view = self.novel_view
-        shift_frame = None
-        n_oneside = int(poses.shape[0] / 2)
-        render_poses = poses[:1]
-        # Novel view middle between both cameras:
-        if novel_view == "mid":
-            new_poses_o = ((poses[n_oneside:, :, -1] - poses[:n_oneside, :, -1]) / 2) + poses[:n_oneside, :, -1]
-            new_poses = np.concatenate([poses[:n_oneside, :, :-1], new_poses_o[..., None]], axis=2)
-            render_poses = new_poses
+        # novel_view = self.novel_view
+        # shift_frame = None
+        # n_oneside = int(poses.shape[0] / 2)
+        # render_poses = poses[:1]
+        # # Novel view middle between both cameras:
+        # if novel_view == "mid":
+        #     new_poses_o = ((poses[n_oneside:, :, -1] - poses[:n_oneside, :, -1]) / 2) + poses[:n_oneside, :, -1]
+        #     new_poses = np.concatenate([poses[:n_oneside, :, :-1], new_poses_o[..., None]], axis=2)
+        #     render_poses = new_poses
 
-        elif novel_view == "shift":
-            render_poses = np.repeat(np.eye(4)[None], n_oneside, axis=0)
-            l_poses = poses[:n_oneside, ...]
-            r_poses = poses[n_oneside:, ...]
-            render_poses[:, :3, :3] = (l_poses[:, :3, :3] + r_poses[:, :3, :3]) / 2.0
-            render_poses[:, :3, 3] = (
-                l_poses[:, :3, 3] + (r_poses[:, :3, 3] - l_poses[:, :3, 3]) * np.linspace(0, 1, n_oneside)[:, None]
-            )
-            if shift_frame is not None:
-                visible_objects = np.repeat(visible_objects[shift_frame][None], len(visible_objects), axis=0)
+        # elif novel_view == "shift":
+        #     render_poses = np.repeat(np.eye(4)[None], n_oneside, axis=0)
+        #     l_poses = poses[:n_oneside, ...]
+        #     r_poses = poses[n_oneside:, ...]
+        #     render_poses[:, :3, :3] = (l_poses[:, :3, :3] + r_poses[:, :3, :3]) / 2.0
+        #     render_poses[:, :3, 3] = (
+        #         l_poses[:, :3, 3] + (r_poses[:, :3, 3] - l_poses[:, :3, 3]) * np.linspace(0, 1, n_oneside)[:, None]
+        #     )
+        #     if shift_frame is not None:
+        #         visible_objects = np.repeat(visible_objects[shift_frame][None], len(visible_objects), axis=0)
 
-        elif novel_view == "left":
-            render_poses = None
-            start_i = 0
-            # Render at trained left camera pose
-            sequ_frames = self.selected_frames
-            l_sequ = sequ_frames[1] - sequ_frames[0] + 1
-            render_poses = (
-                poses[start_i : start_i + l_sequ, ...]
-                if render_poses is None
-                else np.concatenate([render_poses, poses[start_i : start_i + l_sequ, ...]])
-            )
-        elif novel_view == "right":
-            # Render at trained left camera pose
-            render_poses = poses[n_oneside:, ...]
+        # elif novel_view == "left":
+        #     render_poses = None
+        #     start_i = 0
+        #     # Render at trained left camera pose
+        #     sequ_frames = self.selected_frames
+        #     l_sequ = sequ_frames[1] - sequ_frames[0] + 1
+        #     render_poses = (
+        #         poses[start_i : start_i + l_sequ, ...]
+        #         if render_poses is None
+        #         else np.concatenate([render_poses, poses[start_i : start_i + l_sequ, ...]])
+        #     )
+        # elif novel_view == "right":
+        #     # Render at trained left camera pose
+        #     render_poses = poses[n_oneside:, ...]
 
         render_objects = None
         
@@ -485,11 +476,9 @@ class NSGplus(DataParser):
         
         self.config.add_input_rows = add_input_rows
         if split == "train":
-            indices = np.array([50])
-            # i_train
+            indices = i_train
         elif split == "val":
-            indices = np.array([50])
-            # indices = i_val
+            indices = i_test
         elif split == "test":
             indices = i_test
         else:
@@ -540,10 +529,9 @@ class NSGplus(DataParser):
         #     np.reshape(rays_rgb, [image_n, image_height, image_width, 3 + input_size, 3])[:, :, :, 3:, :]
         # )
 
-            
                 
         image_filenames = [image_names[i] for i in indices]
-        depth_filenames = [depth_names[i] for i in indices[: len(indices)//2]] if self.use_depth else None
+        depth_filenames = [depth_names[i] for i in indices[: len(indices)//len(self.cameras)]] if self.use_depth else None
         if self.use_semantic:
             semantic_meta.filenames = [semantic_names[i] for i in indices]
         poses = poses[indices]
@@ -623,18 +611,18 @@ class NSGplus(DataParser):
     def load_ego_pos(self):
         poses_path = os.path.join(self.data, 'ego_pos_with_vel')
         poses = []
-        for frame in range(self.selected_frames[0], self.selected_frames[1]+1):
+        for frame in range(self.n_scene_frames):            
             info = load_pickle(os.path.join(poses_path, ("%06d"%frame)+".pkl"))
             poses.append(info['ego_pose'])
+            
         return np.array(poses).astype(np.float64)
     
-    def load_label(self, poses_imu_w_trans, moving_threshold=1.0):
+    def load_label(self, poses_imu_w_trans, shift=np.zeros(3), moving_threshold=1.0):
         threshold = moving_threshold
         def roty_matrix(yaw):
             c = np.cos(yaw)
             s = np.sin(yaw)
             return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
-            # return np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
         
         # Initialize dictionaries and lists to store object metadata and tracklets
         objects_meta_plus = {}
@@ -642,10 +630,8 @@ class NSGplus(DataParser):
         tracklets_ls = []
 
         start_frame, end_frame = self.selected_frames
-        # Total number of frames in the scene
-        n_scene_frames = len(poses_imu_w_trans)
         # Initialize an array to count the number of objects in each frame
-        n_obj_in_frame = np.zeros(n_scene_frames)
+        n_obj_in_frame = np.zeros(self.n_scene_frames)
         
         for frame in range(start_frame, end_frame):
             objs = load_pickle(os.path.join(self.data, 'label', ("%06d"%frame)+".pkl"))
@@ -655,7 +641,7 @@ class NSGplus(DataParser):
                     type = _sem2label[name]
                     if not oid in objects_meta_plus:
                         l, w, h =  meta[3:6]
-                        objects_meta_plus[oid] = np.array([float(oid), type, l, w, h])
+                        objects_meta_plus[oid] = np.array([float(oid), type, l, h, w])
                 """
                 The first two elements (frame number and object ID) as float64.
                 The object type (converted from the semantic label) as a float.
@@ -673,7 +659,7 @@ class NSGplus(DataParser):
         # Find the maximum number of objects in a frame for the selected frames
         max_obj_per_frame = int(n_obj_in_frame[start_frame : end_frame + 1].max())
         # Initialize an array to store visible objects with dimensions [2*(end_frame-start_frame+1), max_obj_per_frame, 14]
-        visible_objects = np.ones([(end_frame - start_frame + 1) * 2, max_obj_per_frame, 14]) * -1.0
+        visible_objects = np.ones([(end_frame - start_frame + 1) * len(self.cameras), max_obj_per_frame, 14]) * -1.0
         
         # Iterate through the tracklets and process object data
         for tracklet in tracklets_array:
@@ -702,12 +688,14 @@ class NSGplus(DataParser):
                 
                 # Get the IMU pose for the corresponding frame
                 pose_obj_w_i = poses_imu_w_trans[int(frame_no)] @ pose_obj_imu 
+                pose_obj_w_i[:3, 3] -= shift
                 
                 # Calculate the approximate yaw angle of the object in the world frame
-                yaw_aprox = np.arctan2(pose_obj_w_i[1, 0], pose_obj_w_i[0, 0])
+                yaw_aprox = -np.arctan2(pose_obj_w_i[1, 0], pose_obj_w_i[0, 0])
                 
                 # Create a 7-element array representing the 3D pose of the object
                 is_moving = tracklet[-1]
+                
                 pose_3d = np.array([pose_obj_w_i[0, 3], pose_obj_w_i[1, 3], pose_obj_w_i[2, 3], yaw_aprox, 0, 0, is_moving])
                 
 
@@ -723,110 +711,3 @@ class NSGplus(DataParser):
 
 NSGplusDataParserConfigSpecification = DataParserSpecification(config=NSGplusDataParserConfig)
 
-
-
-def plot_kitti_poses(args, poses, visible_objects):
-    """
-    Plotting helper for scene graph poses (position + orientation) in global coordinates
-    :param args:
-    :param poses:
-    :param visible_objects:
-    :return:
-    """
-    plot_poses=True
-    plot_obj = True
-    ax_birdseye = [0, -1]  # if args.dataset_type == 'vkitti' else [0,1]
-    ax_zy = [-1, 1]  # if args.dataset_type == 'vkitti' else [1,2]
-    ax_xy = [0, 1]  # if args.dataset_type == 'vkitti' else [0,2]
-    if plot_poses:
-        fig, ax_lst = plt.subplots(2, 2)
-        position = []
-        for pose in poses:
-            position.append(pose[:3, -1])
-
-        position_array = np.array(position).astype(np.float32)
-        plt.sca(ax_lst[0, 0])
-        plt.scatter(position_array[:, ax_birdseye[0]], position_array[:, ax_birdseye[1]], color='b')
-        plt.sca(ax_lst[1, 0])
-        plt.scatter(position_array[:, ax_xy[0]], position_array[:, ax_xy[1]], color='b')
-        plt.sca(ax_lst[0, 1])
-        plt.scatter(position_array[:, ax_zy[0]], position_array[:, ax_zy[1]], color='b')
-
-        if plot_obj:
-            if args.dataset_type == 'vkitti':
-                object_positions = np.concatenate(visible_objects[:, :, 7:10], axis=0)
-            elif args.dataset_type == 'kitti':
-                object_positions = np.concatenate(visible_objects[:, :, 7:10], axis=0)
-
-            if not object_positions.shape[1] == 0:
-                object_positions = np.squeeze(object_positions[np.argwhere(object_positions[:, 0] != -1)])
-                object_positions = object_positions[None, :] if len(object_positions.shape) == 1 else object_positions
-                plt.sca(ax_lst[0, 0])
-                plt.scatter(object_positions[:, ax_birdseye[0]], object_positions[:, ax_birdseye[1]], color='black')
-                plt.sca(ax_lst[1, 0])
-                plt.scatter(object_positions[:, ax_xy[0]], object_positions[:, ax_xy[1]], color='black')
-                plt.sca(ax_lst[0, 1])
-                plt.scatter(object_positions[:, ax_zy[0]], object_positions[:, ax_zy[1]], color='black')
-
-                # Get locale coordinates of the very first object
-                plt.sca(ax_lst[0, 0])
-                headings = np.reshape(visible_objects_plt[..., 10], [-1, 1])
-                t_o_w = np.reshape(visible_objects_plt[..., 7:10], [-1, 3])
-                # theta_0 = visible_objects_plt[0, 0, 10]
-                # r_ov_0 = np.array([[np.cos(theta_0), 0, np.sin(theta_0)], [0, 1, 0], [-np.sin(theta_0), 0, np.cos(theta_0)]])
-                for i, yaw in enumerate(headings):
-                    yaw = float(yaw)
-                    r_ov = np.array(
-                        [[np.cos(yaw), 0, np.sin(yaw)], [0, 1, 0], [-np.sin(yaw), 0, np.cos(yaw)]])
-                    t = t_o_w[i]
-                    x_v = np.matmul(np.concatenate([r_ov, t[:, None]], axis=1), [5., 0., 0., 1.])
-                    z_v = np.matmul(np.concatenate([r_ov, t[:, None]], axis=1), [0., 0., 5., 1.])
-                    v_origin = np.matmul(np.concatenate([r_ov, t[:, None]], axis=1), [0., 0., 0., 1.])
-
-                    plt.arrow(v_origin[0], v_origin[2], x_v[0] - v_origin[0], x_v[2] - v_origin[2],
-                              color='black', width=0.1)
-                    plt.arrow(v_origin[0], v_origin[2], z_v[0] - v_origin[0], z_v[2] - v_origin[2],
-                              color='orange', width=0.1)
-
-        # For waymo  x --> -z, y --> x, z --> y
-        x_c_0 = np.matmul(poses[0, :, :], np.array([5., .0, .0, 1.]))[:3]
-        y_c_0 = np.matmul(poses[0, :, :], np.array([.0, 5., .0, 1.]))[:3]
-        z_c_0 = np.matmul(poses[0, :, :], np.array([.0, .0, 5., 1.]))[:3]
-        coord_cam_0 = [x_c_0, y_c_0, z_c_0]
-        c_origin_0 = poses[0, :3, 3]
-
-        plt.sca(ax_lst[0, 0])
-        plt.arrow(c_origin_0[ax_birdseye[0]], c_origin_0[ax_birdseye[1]],
-                  coord_cam_0[ax_birdseye[0]][ax_birdseye[0]] - c_origin_0[ax_birdseye[0]],
-                  coord_cam_0[ax_birdseye[0]][ax_birdseye[1]] - c_origin_0[ax_birdseye[1]],
-                  color='red', width=0.1)
-        plt.arrow(c_origin_0[ax_birdseye[0]], c_origin_0[ax_birdseye[1]],
-                  coord_cam_0[ax_birdseye[1]][ax_birdseye[0]] - c_origin_0[ax_birdseye[0]],
-                  coord_cam_0[ax_birdseye[1]][ax_birdseye[1]] - c_origin_0[ax_birdseye[1]],
-                  color='green', width=0.1)
-        plt.axis('equal')
-        plt.sca(ax_lst[1, 0])
-        plt.arrow(c_origin_0[ax_xy[0]], c_origin_0[ax_xy[1]],
-                  coord_cam_0[ax_xy[0]][ax_xy[0]] - c_origin_0[ax_xy[0]],
-                  coord_cam_0[ax_xy[0]][ax_xy[1]] - c_origin_0[ax_xy[1]],
-                  color='red', width=0.1)
-        plt.arrow(c_origin_0[ax_xy[0]], c_origin_0[ax_xy[1]],
-                  coord_cam_0[ax_xy[1]][ax_xy[0]] - c_origin_0[ax_xy[0]],
-                  coord_cam_0[ax_xy[1]][ax_xy[1]] - c_origin_0[ax_xy[1]],
-                  color='green', width=0.1)
-        plt.axis('equal')
-        plt.sca(ax_lst[0, 1])
-        plt.arrow(c_origin_0[ax_zy[0]], c_origin_0[ax_zy[1]],
-                  coord_cam_0[ax_zy[0]][ax_zy[0]] - c_origin_0[ax_zy[0]],
-                  coord_cam_0[ax_zy[0]][ax_zy[1]] - c_origin_0[ax_zy[1]],
-                  color='red', width=0.1)
-        plt.arrow(c_origin_0[ax_zy[0]], c_origin_0[ax_zy[1]],
-                  coord_cam_0[ax_zy[1]][ax_zy[0]] - c_origin_0[ax_zy[0]],
-                  coord_cam_0[ax_zy[1]][ax_zy[1]] - c_origin_0[ax_zy[1]],
-                  color='green', width=0.1)
-        plt.axis('equal')
-
-        # Plot global coord axis
-        plt.sca(ax_lst[0, 0])
-        plt.arrow(0, 0, 5, 0, color='cyan', width=0.1)
-        plt.arrow(0, 0, 0, 5, color='cyan', width=0.1)

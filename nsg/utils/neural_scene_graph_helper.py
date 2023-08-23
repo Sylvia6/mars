@@ -522,15 +522,16 @@ def world2object(pts, dirs, pose, theta_y, dim=None, inverse=False):
         pts = torch.tensor.reshape(pts, [-1, 3])
 
     # Shift the object reference point to the middle of the bbox (vkitti2 specific)
-    y_shift = (
-        torch.tensor([0.0, -1.0, 0.0]).unsqueeze(0)
-        if inverse
-        else torch.tensor([0.0, -1.0, 0.0]).unsqueeze(0).unsqueeze(0)
-    ).to(dim.device) * (dim[..., 1] / 2).unsqueeze(-1)
+    # y_shift = (
+    #     torch.tensor([0.0, -1.0, 0.0]).unsqueeze(0)
+    #     if inverse
+    #     else torch.tensor([0.0, -1.0, 0.0]).unsqueeze(0).unsqueeze(0)
+    # ).to(dim.device) * (dim[..., 1] / 2).unsqueeze(-1)
     # y_shift = (tf.constant([0., -1., 0.])[tf.newaxis, :] if inverse else
     #            tf.constant([0., -1., 0.])[tf.newaxis, tf.newaxis, :]) * \
     #           (dim[..., 1] / 2)[..., tf.newaxis]
-    pose_w = pose + y_shift
+    pose_w = pose
+    # + y_shift
 
     # Describes the origin of the world system w in the object system o
     t_w_o = rotate_yaw(-pose_w, theta_y)
@@ -543,7 +544,7 @@ def world2object(pts, dirs, pose, theta_y, dim=None, inverse=False):
         # dirs_w = tf.repeat(dirs[:, tf.newaxis, ...], N_obj, axis=1)
 
         # Rotate coordinate axis
-        # TODO: Generalize for 3d roaations
+        # TODO: Generalize for 3d rotations
         pts_o = rotate_yaw(pts_w, theta_y) + t_w_o
         dirs_o = rotate_yaw(dirs_w, theta_y)
 
@@ -618,9 +619,10 @@ def object2world(pts, dirs, pose, theta_y, dim=None, inverse=True):
         pts = torch.reshape(pts, [-1, 3])
 
     # Shift the object reference point to the middle of the bbox (vkitti2 specific)
-    y_shift = torch.tensor([0.0, -1.0, 0.0]).unsqueeze(0).to(dim.device) * (dim[..., 1] / 2).unsqueeze(-1)
+    # y_shift = torch.tensor([0.0, -1.0, 0.0]).unsqueeze(0).to(dim.device) * (dim[..., 1] / 2).unsqueeze(-1)
     # y_shift = tf.constant([0., -1., 0.])[tf.newaxis, :] * (dim[..., 1] / 2)[..., tf.newaxis]
-    pose_w = pose + y_shift
+    pose_w = pose
+    # + y_shift
 
     # Describes the origin of the world system w in the object system o
     t_w_o = rotate_yaw(-pose_w, theta_y)

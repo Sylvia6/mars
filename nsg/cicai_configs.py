@@ -24,12 +24,10 @@ from nsg.nsg_pipeline import NSGPipelineConfig
 
 from nerfstudio.configs.base_config import ViewerConfig
 
-MAX_NUM_ITERATIONS = 30000
+MAX_NUM_ITERATIONS = 300000
 # 600000
 STEPS_PER_SAVE = 2000
-STEPS_PER_EVAL_IMAGE = 10 
-# 100 
-# 500
+STEPS_PER_EVAL_IMAGE = 500
 STEPS_PER_EVAL_ALL_IMAGES = 5000
 
 VKITTI_Recon_NSG_Car_Depth_Semantic = MethodSpecification(
@@ -111,12 +109,12 @@ PLUS_Recon_NSG_Car_Depth_Semantic = MethodSpecification(
                 ),
                 train_num_rays_per_batch=4096,
                 eval_num_rays_per_batch=4096,
-                # camera_optimizer=CameraOptimizerConfig(mode="off"),
-                camera_optimizer=CameraOptimizerConfig(
-                    mode="SO3xR3",
-                    optimizer=RAdamOptimizerConfig(lr=6e-4, eps=1e-8, weight_decay=1e-2),
-                    scheduler=ExponentialDecaySchedulerConfig(lr_final=6e-6, max_steps=200000),
-                ),
+                camera_optimizer=CameraOptimizerConfig(mode="off"),
+                # camera_optimizer=CameraOptimizerConfig(
+                #     mode="SO3xR3",
+                #     optimizer=RAdamOptimizerConfig(lr=6e-4, eps=1e-8, weight_decay=1e-2),
+                #     scheduler=ExponentialDecaySchedulerConfig(lr_final=6e-6, max_steps=200000),
+                # ),
             ),
             model=SceneGraphModelConfig(
                 background_model=SemanticNerfWModelConfig(

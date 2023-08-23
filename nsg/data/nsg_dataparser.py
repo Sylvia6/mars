@@ -1045,22 +1045,25 @@ class NSGkitti(DataParser):
         poses = np.matmul(kitti2vkitti, cam_poses_tracking).astype(np.float32)
         visible_objects_[:, :, [9]] *= -1
         visible_objects_[:, :, [7, 8, 9]] = visible_objects_[:, :, [7, 9, 8]]
+        kitti2vkitti = np.array(
+            [[1.0, 0.0, 0.0, 0.0], [0.0, 0.0, -1.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+        )
 
-        # oriented = torch.from_numpy(np.array(poses).astype(np.float32))
-        # oriented, transform_matrix = camera_utils.auto_orient_and_center_poses(
-        #     oriented, method="none", center_poses=True
-        # )
-        # poses[..., :3, :] = oriented.numpy()
-        # visible_objects_[:, :, 7:10] = (
-        #     transform_matrix
-        #     @ np.concatenate(
-        #         [
-        #             visible_objects_[:, :, 7:10, None],
-        #             np.ones([visible_objects_.shape[0], visible_objects_.shape[1], 1, 1]),
-        #         ],
-        #         axis=-2,
-        #     )
-        # )[:, :, :3, 0]
+        oriented = torch.from_numpy(np.array(poses).astype(np.float32))
+        oriented, transform_matrix = camera_utils.auto_orient_and_center_poses(
+            oriented, method="none", center_poses=True
+        )
+        poses[..., :3, :] = oriented.numpy()
+        visible_objects_[:, :, 7:10] = (
+            transform_matrix
+            @ np.concatenate(
+                [
+                    visible_objects_[:, :, 7:10, None],
+                    np.ones([visible_objects_.shape[0], visible_objects_.shape[1], 1, 1]),
+                ],
+                axis=-2,
+            )
+        )[:, :, :3, 0]
 
         visible_objects_ls.append(visible_objects_)
         objects_meta_ls.append(objects_meta_)

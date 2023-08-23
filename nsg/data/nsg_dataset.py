@@ -100,10 +100,10 @@ class NSGkittiDataset(InputDataset):
         metadata = {}
 
         if self.use_depth:
+            height = int(self._dataparser_outputs.cameras.height[data["image_idx"]])
+            width = int(self._dataparser_outputs.cameras.width[data["image_idx"]])
             if data["image_idx"] < len(self.depth_filenames):
                 filepath = self.depth_filenames[data["image_idx"]]
-                height = int(self._dataparser_outputs.cameras.height[data["image_idx"]])
-                width = int(self._dataparser_outputs.cameras.width[data["image_idx"]])
 
                 # Scale depth images to meter units and also by scaling applied to cameras
                 scale_factor = self.depth_unit_scale_factor * self._dataparser_outputs.dataparser_scale
@@ -114,6 +114,9 @@ class NSGkittiDataset(InputDataset):
 
                 metadata["depth_image"] = depth_image
                 metadata["depth_mask"] = depth_mask
+            else:
+                metadata["depth_image"] = torch.zeros(height, width, 1)
+                metadata["depth_mask"] = torch.zeros(height, width, 1).bool()
 
         # semantic metadata
         if self.use_semantic:
