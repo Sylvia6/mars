@@ -327,12 +327,14 @@ class NSGplus(DataParser):
         
         # Calculate the world pose of the object, and center scale
         shift = np.mean(poses[:, :3, 3], axis=0)
-        self.scale_factor = 1 / np.abs(poses[:, :3, 3]).max()
         
         visible_objects_, objects_meta_ = self.load_label(poses_imu_w_tracking, shift=shift)
         
         # Load visible_objects and objects_meta label 
         poses[:, :3, 3] -= shift
+        
+        self.scale_factor = 1 / np.abs(poses[:, :3, 3]).max()
+        
         poses = kitti2vkitti @ poses
         visible_objects_[:, :, [9]] *= -1
         visible_objects_[:, :, [7, 8, 9]] = visible_objects_[:, :, [7, 9, 8]]

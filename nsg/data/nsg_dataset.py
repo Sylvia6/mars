@@ -98,7 +98,21 @@ class NSGkittiDataset(InputDataset):
 
     def get_metadata(self, data: Dict) -> Dict:
         metadata = {}
-
+        
+        sky_mask = None
+        # semantic metadata
+        if self.use_semantic:
+            filepath = self.semantic_filenames[data["image_idx"]]
+            semantics, mask = get_semantics_and_mask_tensors_from_path(
+                filepath=filepath, mask_indices=[], scale_factor=1.0
+            )
+            sky_color = (70, 130, 180) # todo only for plus data
+            metadata["semantics"] = semantics
+            sky_mask = (semantics.squeeze(-1)[..., 0] == sky_color[0]) \
+                & (semantics.squeeze(-1)[...,1] == sky_color[1]) \
+                    & (semantics.squeeze(-1)[..., 2] == sky_color[2])
+            sky_mask = sky_mask.unsqueeze(-1)
+            
         if self.use_depth:
             height = int(self._dataparser_outputs.cameras.height[data["image_idx"]])
             width = int(self._dataparser_outputs.cameras.width[data["image_idx"]])
@@ -110,21 +124,14 @@ class NSGkittiDataset(InputDataset):
                 depth_image = get_depth_image_from_path(
                     filepath=filepath, height=height, width=width, scale_factor=scale_factor
                 )  # default interpolation cv2.INTER_NEAREST
-                depth_mask = torch.abs(depth_image / scale_factor - 65535) > 1e-6  # maskout no-depth input
-
+                # depth_mask = torch.abs(depth_image / scale_factor - 65535) > 1e-6  # maskout no-depth input
+                depth_mask = torch.abs(depth_image) > 1e-6  # maskout no-depth input
+                if sky_mask is not None:
+                    depth_mask = depth_mask & (~sky_mask) # only use no sky depth
                 metadata["depth_image"] = depth_image
                 metadata["depth_mask"] = depth_mask
             else:
                 metadata["depth_image"] = torch.zeros(height, width, 1)
                 metadata["depth_mask"] = torch.zeros(height, width, 1).bool()
-
-        # semantic metadata
-        if self.use_semantic:
-            filepath = self.semantic_filenames[data["image_idx"]]
-            semantics, mask = get_semantics_and_mask_tensors_from_path(
-                filepath=filepath, mask_indices=[], scale_factor=1.0
-            )
-
-            metadata["semantics"] = semantics
 
         return metadata
