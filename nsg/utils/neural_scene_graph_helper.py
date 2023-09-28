@@ -521,6 +521,7 @@ def world2object(pts, dirs, pose, theta_y, dim=None, inverse=False):
 
         pts = torch.tensor.reshape(pts, [-1, 3])
 
+    # The bbox in plus data is exactly the middle point 
     # Shift the object reference point to the middle of the bbox (vkitti2 specific)
     # y_shift = (
     #     torch.tensor([0.0, -1.0, 0.0]).unsqueeze(0)
@@ -618,6 +619,7 @@ def object2world(pts, dirs, pose, theta_y, dim=None, inverse=True):
 
         pts = torch.reshape(pts, [-1, 3])
 
+    # The bbox in plus data is exactly the middle point 
     # Shift the object reference point to the middle of the bbox (vkitti2 specific)
     # y_shift = torch.tensor([0.0, -1.0, 0.0]).unsqueeze(0).to(dim.device) * (dim[..., 1] / 2).unsqueeze(-1)
     # y_shift = tf.constant([0., -1., 0.])[tf.newaxis, :] * (dim[..., 1] / 2)[..., tf.newaxis]

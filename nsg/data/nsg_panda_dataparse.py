@@ -161,7 +161,7 @@ def extract_object_information(args, visible_objects, objects_meta):
     return obj_properties, add_input_rows, obj_meta_ls, scene_objects, scene_classes
 
 @dataclass
-class NSGplusDataParserConfig(DataParserConfig):
+class PandaDataParserConfig(DataParserConfig):
     """nerual scene graph dataset parser config"""
     _target: Type = field(default_factory=lambda: NSGplus)
     """target class to instantiate"""
@@ -219,15 +219,16 @@ class NSGplusDataParserConfig(DataParserConfig):
     """path of semantic inputs"""
     semantic_mask_classes: List[str] = field(default_factory=lambda: [])
     """semantic classes that do not generate gradient to the background model"""
-    cameras: List[str] = field(default_factory=lambda: ["front_right", "front_right"])
+    cameras: List[str] = field(default_factory=lambda: ["front_right"])
+    # , "front_right"])
 
 
 
 @dataclass
-class NSGplus(DataParser):
+class NSGpanda(DataParser):
     """nerual scene graph kitti Dataset"""
 
-    config: NSGplusDataParserConfig
+    config: PandaDataParserConfig
 
     def __init__(self, config: NSGplusDataParserConfig):
         super().__init__(config=config)

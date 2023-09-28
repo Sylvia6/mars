@@ -193,6 +193,8 @@ camera_paths/
 */**/._.DS_Store
 tsinghua-data
 
+render_result
 checkpoints/
 pretrain/
 dependencies/
+.vscode

@@ -323,6 +323,8 @@ class SceneGraphModel(Model):
         N_rays = int(ray_bundle.origins.shape[0])
         rays_o, rays_d = ray_bundle.origins, ray_bundle.directions
 
+        if self.kwargs['bckg_only']:
+            return self.get_background_outputs(ray_bundle)
         # No object pose is provided, use only the background node
         if "object_rays_info" not in ray_bundle.metadata:
             return self.get_background_outputs(ray_bundle)
@@ -585,18 +587,19 @@ class SceneGraphModel(Model):
         if self.use_semantic:
             outputs["semantics"] = self.renderer_semantics(semantics, weights=weights)
 
-        if self.training:
-            outputs["weights_list"] = [weights]
-            outputs["ray_samples_list"] = [ray_samples]
+        # if self.training:
+        outputs["weights_list"] = [weights]
+        outputs["ray_samples_list"] = [ray_samples]
 
         if not self.training and self.config.debug_object_pose:
             debug_weights = calc_weights(delta, debug_density)
             debug_rgb_out = self.renderer_rgb(rgb=debug_rgb, weights=debug_weights)
-            outputs["debug_rgb"] = debug_rgb_out
+            outputs["debug_rgb"] = debug_rgb_outs
 
         if not self.training:
             outputs["background"] = background_rgb
             outputs["background_depth"] = background_depth
+            # here set bckg of objects 0
             densities[id_z_vals_bckg[..., 0], id_z_vals_bckg[..., 1], 0] = 0
             rgbs[id_z_vals_bckg[..., 0], id_z_vals_bckg[..., 1], :] = 0
             new_weights = calc_weights(delta, densities)
@@ -640,6 +643,7 @@ class SceneGraphModel(Model):
         obj_idx = batch_obj_dyn[..., 4].type(torch.int64)
         # TODO: To run cicai_render.py, add to(self.device) in the following line
         obj_meta_tensor = self.object_meta["obj_metadata"]
+        # .to(self.device)
         batch_obj_metadata = torch.index_select(obj_meta_tensor, 0, obj_idx.reshape(-1)).reshape(
             -1, obj_idx.shape[1], obj_meta_tensor.shape[1]
         )  # n_rays * n_obj * 5: [track_id, x,y,z, class_id(type)]
@@ -654,13 +658,14 @@ class SceneGraphModel(Model):
         metrics_dict = {}
         image = batch["image"].to(self.device)
         metrics_dict["psnr"] = self.psnr(outputs["rgb"], image)
-        # metrics_dict["depth_mse"] = torch.mean((outputs["depth"] - batch["depth_image"].to(self.device)) ** 2)
+        if self.use_depth_loss:
+            metrics_dict["depth_mse"] = torch.mean((outputs["depth"] - batch["depth_image"].to(self.device)) ** 2)
         return metrics_dict
 
     def get_loss_dict(self, outputs, batch, metrics_dict=None):
         loss_dict = {}
         image = batch["image"].to(self.device)
-        loss_dict["rgb_loss"] = self.rgb_loss(image, outputs["rgb"])
+        loss_dict["rgb_loss"] = self.rgb_loss(image, outputs["rgb"])*3
 
         if self.config.use_interlevel_loss and self.training:
             loss_dict["interlevel_loss"] = self.config.interlevel_loss_mult * outputs["interlevel_loss"]
@@ -687,7 +692,11 @@ class SceneGraphModel(Model):
                 loss_dict["sky_mask_loss"] = binary_cross_entropy(occ, 1 - sky_mask.float()) + occ[sky_mask].mean()
                 loss_dict["sky_color_loss"] = self.rgb_loss(outputs["sky_rgb"][sky_mask], image[sky_mask])
 
-        if self.training and self.use_depth_loss:
+        '''
+            pay attention to depth_loss calculate        
+        '''
+        # if self.training and 
+        if self.use_depth_loss:
             # assert "depth_image" in batch
             # assert "depth_mask" in batch
             if "depth_image" in batch and "depth_mask" in batch:
@@ -700,40 +709,42 @@ class SceneGraphModel(Model):
                 depth_loss = 0
                 sigma = self._get_sigma().to(self.device)
 
-                if self.config.depth_loss_mult > 1e-8:
-                    for i in range(len(outputs["weights_list"])):
-                        depth_loss += self.depth_loss(
-                            weights=outputs["weights_list"][i],
-                            ray_samples=outputs["ray_samples_list"][i],
-                            termination_depth=depth_gt,
-                            predicted_depth=predicted_depth,
-                            sigma=sigma,
-                            directions_norm=outputs["directions_norm"],
-                            is_euclidean=self.config.is_euclidean_depth,
-                            depth_loss_type=self.config.depth_loss_type,
-                        ) / len(outputs["weights_list"])
-                        
-                mono_depth_loss = monosdf_depth_loss(
-                    termination_depth=depth_gt,
-                    predicted_depth=predicted_depth,
-                    is_euclidean=self.config.is_euclidean_depth,
-                    directions_norm=outputs["directions_norm"],
-                )
-                loss_dict["depth_loss"] = (
-                    self.config.depth_loss_mult * depth_loss + self.config.mono_depth_loss_mult * mono_depth_loss
-                )
+                # when exists depth gt
+                if depth_mask.any(): 
+                    if self.config.depth_loss_mult > 1e-8:
+                        for i in range(len(outputs["weights_list"])):
+                            depth_loss += self.depth_loss(
+                                weights=outputs["weights_list"][i],
+                                ray_samples=outputs["ray_samples_list"][i],
+                                termination_depth=depth_gt,
+                                predicted_depth=predicted_depth,
+                                sigma=sigma,
+                                directions_norm=outputs["directions_norm"],
+                                is_euclidean=self.config.is_euclidean_depth,
+                                depth_loss_type=self.config.depth_loss_type,
+                            ) / len(outputs["weights_list"])
+                            
+                    mono_depth_loss = monosdf_depth_loss(
+                        termination_depth=depth_gt,
+                        predicted_depth=predicted_depth,
+                        is_euclidean=self.config.is_euclidean_depth,
+                        directions_norm=outputs["directions_norm"],
+                    )
+                    loss_dict["depth_loss"] = (
+                        self.config.depth_loss_mult * depth_loss + self.config.mono_depth_loss_mult * mono_depth_loss
+                    )
 
-        if self.training:
-            if self.config.predict_normals:
-                # orientation loss for computed normals
-                loss_dict["orientation_loss"] = self.config.orientation_loss_mult * torch.mean(
-                    outputs["rendered_orientation_loss"]
-                )
+        # if self.training:
+        if self.config.predict_normals:
+            # orientation loss for computed normals
+            loss_dict["orientation_loss"] = self.config.orientation_loss_mult * torch.mean(
+                outputs["rendered_orientation_loss"]
+            )
 
-                # ground truth supervision for normals
-                loss_dict["pred_normal_loss"] = self.config.pred_normal_loss_mult * torch.mean(
-                    outputs["rendered_pred_normal_loss"]
-                )
+            # ground truth supervision for normals
+            loss_dict["pred_normal_loss"] = self.config.pred_normal_loss_mult * torch.mean(
+                outputs["rendered_pred_normal_loss"]
+            )
         return loss_dict
 
     def get_image_metrics_and_images(

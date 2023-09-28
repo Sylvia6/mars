@@ -73,8 +73,6 @@ class NSGkittiDataset(InputDataset):
         self.use_depth = use_depth
         if use_depth:
             self.depth_filenames = self.metadata["depth_filenames"]
-            # self.depth_unit_scale_factor = 0.01  # VKITTI provide depth maps in centimeters
-            self.depth_unit_scale_factor = 1.0
 
     def get_scene_images_tracking(self, l_image_filename):
         imgs = imageio.imread(l_image_filename)
@@ -120,7 +118,7 @@ class NSGkittiDataset(InputDataset):
                 filepath = self.depth_filenames[data["image_idx"]]
 
                 # Scale depth images to meter units and also by scaling applied to cameras
-                scale_factor = self.depth_unit_scale_factor * self._dataparser_outputs.dataparser_scale
+                scale_factor = self._dataparser_outputs.depth_scale 
                 depth_image = get_depth_image_from_path(
                     filepath=filepath, height=height, width=width, scale_factor=scale_factor
                 )  # default interpolation cv2.INTER_NEAREST

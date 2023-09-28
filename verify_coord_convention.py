@@ -58,6 +58,7 @@ class PlusData():
         # calib
         calib_file  = osp.join(self.bag_dir, "calib", ("%06d"%idx)+".pkl")
         calib = load_pickle(calib_file)
+        import pdb; pdb.set_trace()
         
         img_filenames_list = []
         imu2img_list = []
@@ -119,7 +120,9 @@ class PlusData():
         
         # img = plot_rect3d_on_img(img, get_bboxs(fine_boxs), imu2cam_list[0], camera_intrinsics_list[0])
         # img = plot_rect3d_on_img(img, get_bboxs(auto_bboxs), imu2cam_list[0], camera_intrinsics_list[0])
-        img = plot_rect3d_on_img(img, get_bboxs(bboxs), imu2cam_list[0], camera_intrinsics_list[0], (255,0,0))
+        img, obj_imu = plot_rect3d_on_img(img, bboxs, imu2cam_list[0], camera_intrinsics_list[0], (255,0,0))
+        
+        obj_w = ego_pos @ obj_imu[0]
         cv2.imwrite(f'tmp/{idx}.png', img)
         print(f'frame {idx}')
         # print([l['track_id'] for l in auto_label])
@@ -184,11 +187,12 @@ def plot_points(points, bboxs=None, file_name=None, bev_range=[-100, -50, 150, 5
         return canvas
 
 def plot_rect3d_on_img(img,
-                       bboxs_imu, imu2cam, K,
+                       bboxs, imu2cam, K,
                        color=(0, 255, 0),
                        thickness=1):
     line_indices = ((0, 1), (0, 3), (0, 4), (1, 2), (1, 5), (3, 2), (3, 7),
                     (4, 5), (4, 7), (2, 6), (5, 6), (6, 7))
+    bboxs_imu, obj_imu = get_bboxs(bboxs)
     for bbox_imu in bboxs_imu:
         bbox_cam = bbox_imu @ imu2cam.T
         if (bbox_cam[:, 2] <= 0.0).any():
@@ -200,7 +204,7 @@ def plot_rect3d_on_img(img,
                         color, thickness,
                         cv2.LINE_AA)
 
-    return img.astype(np.uint8)
+    return img.astype(np.uint8), obj_imu
 
 def get_bboxs(bboxs):
     res = []
@@ -233,7 +237,8 @@ def get_bboxs(bboxs):
         corners_imu = corners @ obj_pose_imu.T
     
         res.append(corners_imu)
-    return res
+        obj_imu.append(obj_pose_imu)
+    return res, np.array(obj_imu)
 
 
 if __name__ == '__main__':
@@ -243,20 +248,21 @@ if __name__ == '__main__':
     # img = cv2.imread(data.get_item(80)['img_info'][0])[...,::-1]
     # H, W, _ = img.shape
 
+    info = data.get_item(50)    
 
     # for frame in range(100, data.len(), 20):
-    os.makedirs('tmp', exist_ok=True)
-    for frame in range(0,data.len()):
-        info = data.get_item(frame)    
+    # os.makedirs('tmp', exist_ok=True)
+    # for frame in range(0,data.len()):
+    #     info = data.get_item(frame)    
         # img = cv2.imread(info['img_info'][0])
         # H, W, _ = img.shape
         # K = info['camera_intrinsics'][0] 
         # imu2world_pose = (np.linalg.inv(mid_pos) @ info['ego_pos'])
         
             
-        """
-            lidar map verify
-        """
+        # """
+        #     lidar map verify
+        # """
         # pose = info['imu2cam'][0]
         # points = np.fromfile(info['pts_filename']).reshape(-1, 4)
         # points[:, -1] = 1

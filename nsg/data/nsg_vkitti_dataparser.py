@@ -320,6 +320,7 @@ class NSGvkittiDataParserConfig(DataParserConfig):
     data: Path = Path("/data1/vkitti/Scene06/clone")
     """Directory specifying location of data."""
     scale_factor: float = 0.1
+    depth_scale: float = 0.01
     """How much to scale the camera origins by."""
     scene_scale: float = 2.0
     """How much to scale the region of interest by."""
@@ -327,7 +328,7 @@ class NSGvkittiDataParserConfig(DataParserConfig):
     """alpha color of background"""
     first_frame: int = 0
     """specifies the beginning of a sequence if not the complete scene is taken as Input"""
-    last_frame: int = 237
+    last_frame: int = 338
     """specifies the end of a sequence"""
     use_object_properties: bool = True
     """ use pose and properties of visible objects as an input """
@@ -383,6 +384,7 @@ class NSGvkitti(DataParser):
         super().__init__(config=config)
         self.data: Path = config.data
         self.scale_factor: float = config.scale_factor
+        self.depth_scale: float = config.depth_scale
         self.alpha_color = config.alpha_color
         self.selected_frames = [config.first_frame, config.last_frame]
         self.novel_view = config.novel_view
@@ -515,6 +517,9 @@ class NSGvkitti(DataParser):
         poses[..., :3, 3] = origins - mean_origin
         object_pose[..., 7:10] = object_pose[..., 7:10] - mean_origin
 
+        self.scale_factor = 1 / np.abs(poses[:, :3, 3]).max()
+        self.config.scale_factor = self.scale_factor
+
         visible_objects, object_meta, max_objects_per_frame = _get_objects_by_frame(
             object_pose, object_meta, max_objects_per_frame, n_cam, self.selected_frames, row_id
         )
@@ -584,9 +589,11 @@ class NSGvkitti(DataParser):
         self.config.add_input_rows = add_input_rows
         if split == "train":
             indices = i_train
+            # np.array([303]) 
+            # 
         elif split == "val":
             indices = i_test
-            # indices = i_val
+            # np.array([303]) 
         elif split == "test":
             indices = i_test
         else:
@@ -665,6 +672,7 @@ class NSGvkitti(DataParser):
             scene_box=scene_box,
             mask_filenames=instance_filenames,
             dataparser_scale=self.scale_factor,
+            depth_scale=self.depth_scale*self.scale_factor,
             metadata={
                 "depth_filenames": depth_filenames,
                 "obj_metadata": obj_meta_tensor if len(obj_meta_tensor) > 0 else None,

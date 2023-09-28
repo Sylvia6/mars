@@ -24,11 +24,13 @@ from nsg.nsg_pipeline import NSGPipelineConfig
 
 from nerfstudio.configs.base_config import ViewerConfig
 
-MAX_NUM_ITERATIONS = 300000
+MAX_NUM_ITERATIONS = 20000
 # 600000
 STEPS_PER_SAVE = 2000
-STEPS_PER_EVAL_IMAGE = 500
+STEPS_PER_EVAL_IMAGE = 50 
+# 200
 STEPS_PER_EVAL_ALL_IMAGES = 5000
+
 
 VKITTI_Recon_NSG_Car_Depth_Semantic = MethodSpecification(
     config=TrainerConfig(
@@ -49,11 +51,11 @@ VKITTI_Recon_NSG_Car_Depth_Semantic = MethodSpecification(
                     use_semantic=True,
                     semantic_mask_classes=['Van', 'Undefined'],
                     car_object_latents_path=Path(
-                        "/DATA_EDS/liuty/ckpts/pretrain/car_nerf/vkitti/latents/latent_codes02.pt"
+                        "/mnt/intel/jupyterhub/lilu/code/mars/checkpoints/Vitural KITTI 2/car-object-latents/latent_codes18.pt"
                     ),
                     split_setting="reconstruction",
-                    car_nerf_state_dict_path=Path("/DATA_EDS/liuty/ckpts/pretrain/car_nerf/vkitti/epoch_805.ckpt"),
-                    semantic_path=Path("/data22/DISCOVER_summer2023/xiaohm2306/Scene02/clone/frames/classSegmentation")
+                    car_nerf_state_dict_path=Path("/mnt/intel/jupyterhub/lilu/code/mars/checkpoints/Vitural KITTI 2/car-nerf-state-dict/epoch_805.ckpt"),
+                    semantic_path=Path("/mnt/intel/data/mrb/dataset/vkitti/Scene18/clone/frames/classSegmentation")
                 ),
                 train_num_rays_per_batch=4096,
                 eval_num_rays_per_batch=4096,
@@ -87,6 +89,7 @@ VKITTI_Recon_NSG_Car_Depth_Semantic = MethodSpecification(
     ),
     description="Neural Scene Graph with semantic learning for the backgruond model.",
 )
+
 
 PLUS_Recon_NSG_Car_Depth_Semantic = MethodSpecification(
     config=TrainerConfig(
@@ -131,24 +134,18 @@ PLUS_Recon_NSG_Car_Depth_Semantic = MethodSpecification(
         ),
         optimizers={
             "background_model": {
-                # "optimizer": RAdamOptimizerConfig(lr=2e-3, eps=1e-15),
-                # "scheduler": ExponentialDecaySchedulerConfig(lr_final=1e-5, max_steps=200000),
                 "optimizer": RAdamOptimizerConfig(lr=1e-2, eps=1e-15),
                 "scheduler": ExponentialDecaySchedulerConfig(lr_final=0.0001, max_steps=200000),
+                # "optimizer": RAdamOptimizerConfig(lr=1e-3, eps=1e-15),
+                # "scheduler": ExponentialDecaySchedulerConfig(lr_final=1e-5, max_steps=200000),
             },
-            # "learnable_global": {
-            #     "optimizer": RAdamOptimizerConfig(lr=1e-3, eps=1e-15),
-            #     "scheduler": ExponentialDecaySchedulerConfig(lr_final=1e-5, max_steps=200000),
-            # },
             "object_model": {
                 "optimizer": RAdamOptimizerConfig(lr=5e-3, eps=1e-15),
                 "scheduler": ExponentialDecaySchedulerConfig(lr_final=1e-5, max_steps=200000),
-                # "optimizer": RAdamOptimizerConfig(lr=5e-3, eps=1e-15),
-                # "scheduler": ExponentialDecaySchedulerConfig(lr_final=1e-5, max_steps=200000),
             },
         },
         viewer=ViewerConfig(num_rays_per_chunk=1 << 15),
-        vis="viewer+wandb",
+        vis="wandb",
     ),
     description="Neural Scene Graph with semantic learning for the backgruond model.",
 )
