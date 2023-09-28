@@ -108,6 +108,7 @@ class NSGPipeline(Pipeline):
             semantics_meta=self.datamanager.train_dataset.metadata["semantics"]
             if self.datamanager.train_dataset.use_semantic
             else None,
+            bckg_only=self.datamanager.train_dataset.metadata['bckg_only']
         )
         self.model.to(device)
 
